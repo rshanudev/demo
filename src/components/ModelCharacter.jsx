@@ -40,7 +40,7 @@ const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), DOWN = new
 /* Loads, fits (height, standing on the ground, centred, facing +z) and exposes rig.current.model:
    reach(side, pointInPlayerSpace, poleDir) · aim(side, rotX, rotZ) · leg(side, angle) · head(x, y) · play(key) · has(key)
    side +1 is the player's +x side (the character's left hand when facing +z). */
-function ModelCharacter({ url, rig, height = 2.75 }) {
+function ModelCharacter({ url, rig, height = 2.46 }) {
   const gltf = useGLTF(url);
   const holder = useRef(), st = useRef({ action: null, key: null });
   const { scene, bones, rest } = useMemo(() => {

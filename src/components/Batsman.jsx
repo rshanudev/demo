@@ -55,9 +55,10 @@ export default function Batsman({ index, animRef, enter, mood }) {
     const now = clock.elapsedTime;
     if (born.current === null) born.current = now;
     const age = now - born.current, a = animRef.current, t = a ? a.t : 0, six = a && a.kind === 'six';
-    let x = BAT_X, y = Math.sin(now * 3) * 0.015, yaw = STANCE_YAW, lean = 0, head = 0, legs = 0, pose = idlePose(now);
+    let crouch = 0.2, x = BAT_X, y = Math.sin(now * 3) * 0.015, yaw = STANCE_YAW, lean = 0, head = 0, legs = 0, pose = idlePose(now);
 
     if (enter && age < 0.9) {                       // new batsman jogs in
+      crouch = 0.2 * clamp01((age - 0.6) / 0.3);
       const e = ease(clamp01(age / 0.9));
       x = lerp(BAT_X - 4.5, BAT_X, e); yaw = lerp(1.5, STANCE_YAW, e); legs = Math.sin(now * 14) * 0.6 * (1 - e);
     }
@@ -65,6 +66,7 @@ export default function Batsman({ index, animRef, enter, mood }) {
       const sh = a.shot || { s0: 1.67, yawEnd: 0.95, armX: -0.15, lean: 0 };
       pose = swingPose(t, sh, six);                  // stance -> backlift -> downswing -> follow-through
       const turn = 1 - (1 - pose.f) * (1 - pose.f);
+      crouch = 0.2 * (1 - turn * 0.75);                // batting crouch, rising through the shot
       yaw = lerp(STANCE_YAW, sh.yawEnd, turn); lean = sh.lean * turn;
       if (six) {
         const c = clamp01((t - 2.55) / 0.3);
@@ -73,21 +75,25 @@ export default function Batsman({ index, animRef, enter, mood }) {
         const d = clamp01((t - 2.35) / 0.45);
         if (d > 0) { head = 0.5 * d; lean += -0.2 * d; }
         const wk = clamp01((t - 3.6) / 1.2);        // walk off
-        if (wk > 0) { x = lerp(BAT_X, BAT_X - 7.5, wk); yaw = lerp(yaw, -1.5, clamp01((t - 3.5) / 0.2)); legs = Math.sin(now * 12) * 0.5; head = 0.3; }
+        if (wk > 0) { crouch = 0; x = lerp(BAT_X, BAT_X - 7.5, wk); yaw = lerp(yaw, -1.5, clamp01((t - 3.5) / 0.2)); legs = Math.sin(now * 12) * 0.5; head = 0.3; }
       }
-    } else if (mood === 'win') { pose = CELEB; y += Math.abs(Math.sin(now * 7)) * 0.3; yaw = 0.2; }
-    else if (mood === 'lose') { pose = DROOP; head = 0.5; }
+    } else if (mood === 'win') { crouch = 0; pose = CELEB; y += Math.abs(Math.sin(now * 7)) * 0.3; yaw = 0.2; }
+    else if (mood === 'lose') { crouch = 0; pose = DROOP; head = 0.5; }
 
     // head: watches the bowler and the ball, follows a six into the sky, eases between targets
-    let lookY = 0.2 + Math.sin(now * 0.7) * 0.1, lookX = head + Math.sin(now * 1.1) * 0.03;
-    if (a) { if (t < 2.3) lookY = 0.9; else if (six) { lookY = 0.45; lookX = -0.45; } else lookY = 0.1; }
+    let lookY = 0.62 + Math.sin(now * 0.7) * 0.06, lookX = head + Math.sin(now * 1.1) * 0.03;
+    if (a) { if (t < 2.3) lookY = 1.05; else if (six) { lookY = 0.45; lookX = -0.45; } else lookY = 0.1; }
     if (mood) lookY = 0;
     const L = look.current, k = 1 - Math.exp(-Math.min(dt, 0.05) * 7);
     L.x += (lookX - L.x) * k; L.y += (lookY - L.y) * k;
     const sway = a || mood ? 0 : Math.sin(now * 0.9) * 0.03;   // idle weight shift from foot to foot
-    g.position.set(x, y, PZ); g.rotation.set(lean, yaw, sway);
+    R.crouch = crouch;                                 // knees bent, hips back, feet stay planted
+    g.position.set(x, y - crouch * 0.15, PZ); g.rotation.set(lean, yaw, sway);
     if (model) { model.play('idle'); model.head(L.x, L.y); model.leg(-1, legs); model.leg(1, -legs); }
-    else { R.head.rotation.set(L.x, L.y, 0); R.legL.rotation.x = legs; R.legR.rotation.x = -legs; }
+    else {
+      R.head.rotation.set(L.x, L.y, 0); R.legL.rotation.x = legs - crouch; R.legR.rotation.x = -legs - crouch;
+      R.legL.rotation.z = -crouch * 0.5; R.legR.rotation.z = crouch * 0.5;      // feet a little wider than the shoulders
+    }
 
     // bat: grip is the bottom hand, the top hand holds the handle just above it (or lets go to celebrate / trudge off)
     const { grip, top, free, dir, face, side, m } = tmp;

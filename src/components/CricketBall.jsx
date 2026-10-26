@@ -22,18 +22,26 @@ export default function CricketBall({ animRef }) {
     if (!a || !a.shot || a.t < T.release) { m.visible = false; return; }
     m.visible = true;
     const t = a.t, six = a.kind === 'six', sh = a.shot;
+    const r0 = a.relPos || { x: RELEASE.x, y: RELEASE.y, z: PZ };   // released from the bowler's hand
     let x, y, z;
-    if (t <= T.contact) {                                   // delivery: release -> bounce -> bat
-      const u = (t - T.release) / (T.contact - T.release), endY = six ? CONTACT.y : sh.low;
-      x = lerp(RELEASE.x, CONTACT.x, u);
-      y = u < 0.55 ? RELEASE.y - (RELEASE.y - 0.15) * Math.pow(u / 0.55, 1.6) : 0.15 + (endY - 0.15) * (1 - Math.pow(1 - (u - 0.55) / 0.45, 2));
-      z = PZ + (six ? CONTACT.dz : 0.1) * u;
+    if (six && t <= T.contact) {                            // delivery: release -> bounce -> bat
+      const u = (t - T.release) / (T.contact - T.release);
+      x = lerp(r0.x, CONTACT.x, u);
+      y = u < 0.55 ? r0.y - (r0.y - 0.15) * Math.pow(u / 0.55, 1.6) : 0.15 + (CONTACT.y - 0.15) * (1 - Math.pow(1 - (u - 0.55) / 0.45, 2));
+      z = lerp(r0.z, PZ + CONTACT.dz, u);
     } else if (six) {                                       // SIX: a different shot every time
       const b = sixBall(t, sh); x = b.x; y = b.y; z = b.z; m.visible = b.v < 1;
-    } else {                                                // wrong answer: under the bat into the stumps, then bounces away
-      const v = clamp01((t - T.contact) / (T.stump - T.contact));
-      if (t < T.stump) { x = lerp(CONTACT.x, STUMP_BAT + 0.3, v); y = sh.low; z = PZ + 0.1; }
-      else { const w = clamp01((t - T.stump) / 0.8); x = STUMP_BAT + 0.3 - w * 1.8; y = 0.13 + Math.abs(Math.sin(w * Math.PI * 2)) * 0.5 * (1 - w); z = PZ + 0.1 + w * 2; }
+    } else if (t <= T.stump) {                              // wrong answer: pitches once, kicks up past the bat and flies into the stumps
+      const p = (t - T.release) / (T.stump - T.release), tB = T.release + sh.pitch * (T.stump - T.release);
+      x = lerp(r0.x, STUMP_BAT + 0.1, p);
+      z = lerp(r0.z, PZ, p) + 0.12 * Math.sin(Math.PI * p);
+      if (t < tB) y = r0.y - (r0.y - 0.15) * Math.pow((t - T.release) / (tB - T.release), 1.6);
+      else { const s = (t - tB) / (T.stump - tB); y = 0.15 + (sh.low - 0.15) * (1 - (1 - s) * (1 - s)); }
+    } else {                                                // ...then deflects off the stumps and bobbles away
+      const w = clamp01((t - T.stump) / 0.8);
+      x = STUMP_BAT + 0.1 - w * 1.8;
+      y = 0.13 + (sh.low - 0.13) * Math.max(0, 1 - w * 3) + Math.abs(Math.sin(w * Math.PI * 2)) * 0.45 * (1 - w);
+      z = PZ + w * 2;
     }
     m.position.set(x, y, z); m.rotation.x += 0.4; m.rotation.z += 0.2;
   });

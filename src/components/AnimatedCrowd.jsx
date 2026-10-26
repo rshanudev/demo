@@ -32,14 +32,14 @@ function faceTexture() {
 }
 
 export default function AnimatedCrowd({ animRef, mood, quality }) {
-  const N = quality === 'low' ? 180 : 420;              // fewer, evenly spaced kids: a cleaner, less busy crowd
+  const N = quality === 'low' ? 320 : 900;              // fewer, evenly spaced kids: a cleaner, less busy crowd
   const bodies = useRef(), heads = useRef(), hairs = useRef(), caps = useRef(), arms = useRef(), hands = useRef(), ex = useRef(0.3);
   const people = useMemo(() => {
     const per = Math.floor(N / ROWS), out = [], pick = L => L[(Math.random() * L.length) | 0];
     for (let r = 0; r < ROWS; r++) for (let k = 0; k < per; k++) {
       const th = ((k + (r % 2) * 0.5) / per) * Math.PI * 2;
       const px = Math.cos(th) * ringA(r), pz = Math.sin(th) * ringB(r);
-      out.push({ px, pz, py: ringY(r), face: Math.atan2(-px, -pz), ph: Math.random() * 6.28, sc: 1.32,
+      out.push({ px, pz, py: ringY(r), face: Math.atan2(-px, -pz), ph: Math.random() * 6.28, sc: 1.72,
         sh: pick(SHIRTS), sk: pick(SKINS), hr: pick(HAIRS), cap: Math.random() < 0.85 ? pick(CAPS) : null });
     }
     return out;

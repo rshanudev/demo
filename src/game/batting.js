@@ -4,8 +4,10 @@ import { clamp01, lerp, ease } from './constants.js';
 /* Two-handed batting. The bat is posed by its grip (bottom hand) and an angle in the swing plane,
    then both arms reach for the handle with a two-bone IK, so the gloves always stay on the bat.
    Everything here is in the batsman's own space (before his yaw/scale are applied). */
-export const ARM = { upper: 0.42, lower: 0.44 };
-export const STANCE_YAW = 0.45, BAT_SCALE = 1.05;
+export const ARM = { upper: 0.5, lower: 0.5 };
+/* real human proportions (player space, before scaling): hips just over half the height, head about a sixth */
+export const BODY = { hipX: 0.13, hipY: 1.3, shoulderX: 0.34, shoulderY: 1.9, torsoY: 1.58, neckY: 2.04, headY: 2.24, head: 0.48 };
+export const STANCE_YAW = 0.15, BAT_SCALE = 1.4;      // side-on: front shoulder points down the pitch
 export const TOP_HAND = 0.16;                 // top hand sits this far up the handle from the bottom hand
 export const SWEET = 0.74;                    // distance from the bottom hand to the middle of the blade
 const DOWNSWING = 0.33;                       // seconds from the top of the backlift to the hit
@@ -16,14 +18,16 @@ const N = new THREE.Vector3().crossVectors(B, UP);                             /
 
 /* g = bottom-hand position, a = angle (deg) of the bat in the swing plane, k = tilt out of the plane,
    free = how far the top hand has let go of the handle, ft = where the free top hand goes */
-const HANG = [0.62, 0.74, 0.12], FIST = [0.64, 2.24, 0.26];
-const STANCE = { g: [-0.02, 1.05, 0.42], a: -76, k: 0, free: 0, ft: HANG };
-const LIFT = { g: [-0.3, 1.5, 0.25], a: -235, k: -0.1, free: 0, ft: HANG };
-const HIT = { g: [0.05, 1.25, 0.45], a: -55, k: 0.1, free: 0, ft: HANG };
-const FOLLOW_DRIVE = { g: [0.12, 1.6, 0.48], a: 150, k: 0.35, free: 0, ft: HANG };
-const FOLLOW_PULL = { g: [0.18, 1.38, 0.4], a: 168, k: 0.25, free: 0, ft: HANG };
-export const CELEB = { g: [-0.56, 2.15, 0.2], a: 90, k: 0, free: 1, ft: FIST };
-export const DROOP = { g: [-0.2, 0.85, 0.3], a: 284, k: 0.1, free: 1, ft: HANG };
+/* the swing was authored for the old compact cartoon body; fit() maps those grip points onto the real-proportioned one */
+const fit = ([x, y, z]) => [x * 0.75, 1.08 + (y - 1.05) * 1.16, z];
+const HANG = [0.42, 0.95, 0.12], FIST = [0.45, 2.72, 0.2];
+const STANCE = { g: fit([-0.02, 1.05, 0.42]), a: -76, k: 0, free: 0, ft: HANG };
+const LIFT = { g: fit([-0.3, 1.5, 0.25]), a: -235, k: -0.1, free: 0, ft: HANG };
+const HIT = { g: fit([0.05, 1.25, 0.45]), a: -55, k: 0.1, free: 0, ft: HANG };
+const FOLLOW_DRIVE = { g: fit([0.12, 1.6, 0.48]), a: 150, k: 0.35, free: 0, ft: HANG };
+const FOLLOW_PULL = { g: fit([0.18, 1.38, 0.4]), a: 168, k: 0.25, free: 0, ft: HANG };
+export const CELEB = { g: fit([-0.56, 2.15, 0.2]), a: 90, k: 0, free: 1, ft: FIST };
+export const DROOP = { g: [-0.15, 1.0, 0.3], a: 284, k: 0.1, free: 1, ft: HANG };
 export const idlePose = now => ({ ...STANCE, a: STANCE.a + Math.sin(now * 2.2) * 4 });
 
 const mix3 = (p, q, k) => [lerp(p[0], q[0], k), lerp(p[1], q[1], k), lerp(p[2], q[2], k)];

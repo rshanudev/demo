@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import { ARM } from '../game/batting.js';
+import { ARM, BODY } from '../game/batting.js';
 import { limbGeometry, ARM_RADIUS, sleeveFolds, LEG, LEG_RADIUS, trouserFolds, torsoGeometry, shoeGeometry, soleGeometry, hairGeometry } from './characterGeometry.js';
 /* Stylised (animated-film look) player. Limbs are smooth skinned surfaces on two bones each (shoulder/elbow,
    hip/knee); the parent animates the joints it finds in rig.current: armL/R, elbowL/R, legL/R, head
@@ -53,7 +53,8 @@ function Limb({ pos, L1, L2, geometry, upperRef, lowerRef, children, extra }) {
 }
 
 /* bare hand: soft palm, four fingers and a thumb, gently curled */
-function Hand({ side, skin }) {
+/* bare hand: soft palm, four fingers and a thumb, gently curled; the bowling hand can hold a ball (ballRef) */
+function Hand({ side, skin, ballRef }) {
   return (
     <group position={[0, 0.02, 0]}>
       <mesh position={[0, -0.05, 0]} scale={[0.62, 1, 1]} castShadow><sphereGeometry args={[0.1, 28, 20]} /><Skin c={skin} /></mesh>
@@ -63,6 +64,12 @@ function Hand({ side, skin }) {
         </mesh>
       ))}
       <mesh position={[side * -0.04, -0.05, 0.085]} rotation={[0.9, 0, side * 0.4]} castShadow><capsuleGeometry args={[0.026, 0.05, 6, 12]} /><Skin c={skin} /></mesh>
+      {ballRef && (
+        <group ref={ballRef} position={[side * -0.085, -0.12, 0.03]}>
+          <mesh castShadow><sphereGeometry args={[0.107, 24, 16]} /><meshPhysicalMaterial color="#c3202e" roughness={0.38} clearcoat={0.8} clearcoatRoughness={0.25} /></mesh>
+          <mesh><torusGeometry args={[0.107, 0.008, 8, 32]} /><meshStandardMaterial color="#f4ead6" roughness={0.6} /></mesh>
+        </group>
+      )}
     </group>
   );
 }
@@ -95,7 +102,7 @@ function Shoe({ colour }) {
 /* batting pad strapped to the shin: knee roll, three vertical bolsters, two straps */
 function Pad({ strap }) {
   return (
-    <group position={[0, -0.13, 0.13]}>
+    <group position={[0, -0.2, 0.11]} scale={[0.82, 1.22, 0.9]}>
       <RoundedBox args={[0.31, 0.6, 0.12]} radius={0.055} smoothness={5} castShadow><Cloth c="#fbfbf7" r={0.55} /></RoundedBox>
       {[-0.085, 0, 0.085].map(x => <mesh key={x} position={[x, -0.03, 0.055]} castShadow><capsuleGeometry args={[0.032, 0.44, 8, 14]} /><Cloth c="#f4f4ee" r={0.55} /></mesh>)}
       <mesh position={[0, 0.27, 0.03]} rotation={[0, 0, Math.PI / 2]} castShadow><capsuleGeometry args={[0.058, 0.2, 10, 16]} /><Cloth c="#f7f7f1" r={0.5} /></mesh>
@@ -107,7 +114,7 @@ function Pad({ strap }) {
 /* glossy cartoon eye: white, iris, pupil, two catch-lights, an upper lid that closes to blink, and a lash line */
 function Eye({ side, lidRef, skin }) {
   return (
-    <group position={[side * 0.16, -0.01, 0.318]} rotation={[0, side * 0.28, 0]} scale={1.2}>
+    <group position={[side * 0.145, 0.0, 0.345]} rotation={[0, side * 0.28, 0]} scale={0.66}>
       <mesh scale={[0.9, 1.12, 0.72]}><sphereGeometry args={[0.1, 32, 24]} /><meshPhysicalMaterial color="#ffffff" roughness={0.15} clearcoat={1} clearcoatRoughness={0.03} /></mesh>
       <mesh position={[0, -0.004, 0.058]} scale={[0.92, 1.12, 0.42]}><sphereGeometry args={[0.07, 32, 20]} /><meshPhysicalMaterial color="#3d200e" roughness={0.3} clearcoat={1} clearcoatRoughness={0.02} /></mesh>
       <mesh position={[0, -0.004, 0.074]} scale={[0.92, 1.12, 0.42]}><sphereGeometry args={[0.04, 24, 16]} /><meshStandardMaterial color="#0d0704" roughness={0.2} /></mesh>
@@ -133,25 +140,25 @@ export default function Humanoid({ rig, skin = '#ffd6b0', shirt = '#2a58c8', pan
     const k = t > b.next ? Math.sin(((t - b.next) / 0.16) * Math.PI) : 0;
     lids.current.forEach(l => l && (l.rotation.x = 0.12 + 1.25 * k));
     if (chest.current) chest.current.scale.set(1 + Math.sin(t * 2.2) * 0.01, 1 + Math.sin(t * 2.2) * 0.014, 0.86);   // breathing
-    [['legL', 'kneeL'], ['legR', 'kneeR']].forEach(([h, n]) => { if (R[h] && R[n]) R[n].rotation.x = 0.06 + Math.max(0, R[h].rotation.x) * 1.6; });   // knees bend as the leg swings back
+    [['legL', 'kneeL'], ['legR', 'kneeR']].forEach(([h, n]) => { if (R[h] && R[n]) R[n].rotation.x = 0.06 + Math.max(0, R[h].rotation.x) * 1.6 + (R.crouch || 0) * 2; });   // knees bend as the leg swings back, and when crouching
   });
 
-  const blush = useMemo(() => <meshBasicMaterial color="#ff7f7f" transparent opacity={0.35} depthWrite={false} />, []);
+  const blush = useMemo(() => <meshBasicMaterial color="#ff7f7f" transparent opacity={0.18} depthWrite={false} />, []);
   const leg = (side, n, kn) => (
-    <Limb key={n} pos={[side * 0.17, 0.92, 0]} L1={LEG.upper} L2={LEG.lower} geometry={legGeo} upperRef={set(n)} lowerRef={set(kn)}
+    <Limb key={n} pos={[side * BODY.hipX, BODY.hipY, 0]} L1={LEG.upper} L2={LEG.lower} geometry={legGeo} upperRef={set(n)} lowerRef={set(kn)}
       extra={pad ? <Pad strap={shoe} /> : null}>
-      <group position={[0, -0.06, 0.03]}><Shoe colour={shoe} /></group>
+      <group position={[0, -0.06, 0.03]} scale={0.78}><Shoe colour={shoe} /></group>
     </Limb>
   );
   const arm = (side, n, e) => (
-    <Limb key={n} pos={[side * 0.5, 1.52, 0]} L1={ARM.upper} L2={ARM.lower} geometry={armGeo} upperRef={set(n)} lowerRef={set(e)}>
-      {pad ? <BattingGlove side={side} glove={glove} cuff={shirt} /> : <Hand side={side} skin={glove} />}
+    <Limb key={n} pos={[side * BODY.shoulderX, BODY.shoulderY, 0]} L1={ARM.upper} L2={ARM.lower} geometry={armGeo} upperRef={set(n)} lowerRef={set(e)}>
+      {pad ? <BattingGlove side={side} glove={glove} cuff={shirt} /> : <Hand side={side} skin={glove} ballRef={side > 0 ? set('ball') : null} />}
     </Limb>
   );
   return (
     <>
       {leg(-1, 'legL', 'kneeL')}{leg(1, 'legR', 'kneeR')}
-      <group ref={set('torso')} position={[0, 1.2, 0]}>
+      <group ref={set('torso')} position={[0, BODY.torsoY, 0]} scale={[0.7, 1, 0.74]}>
         <mesh ref={chest} geometry={torsoGeo} scale={[1, 1, 0.86]} castShadow receiveShadow><Cloth c={shirt} /></mesh>
         <mesh position={[0, -0.36, 0]}><cylinderGeometry args={[0.345, 0.33, 0.14, 48]} /><Cloth c={pants} /></mesh>
         {/* polo collar: band, two collar points, placket and buttons */}
@@ -168,14 +175,15 @@ export default function Humanoid({ rig, skin = '#ffd6b0', shirt = '#2a58c8', pan
       </group>
       {arm(-1, 'armL', 'elbowL')}{arm(1, 'armR', 'elbowR')}
       {/* big round head: cheeks, chin, ears, nose, glossy eyes with lids */}
-      <group ref={set('head')} position={[0, 2.12, 0]} scale={1.2}>
-        <mesh castShadow scale={[1, 0.97, 0.95]}><sphereGeometry args={[0.43, 64, 48]} /><Skin c={skin} /></mesh>
+      <mesh position={[0, BODY.neckY, 0.01]} castShadow><cylinderGeometry args={[0.075, 0.09, 0.26, 24]} /><Skin c={skin} /></mesh>
+      <group ref={set('head')} position={[0, BODY.headY, 0]} scale={BODY.head}>
+        <mesh castShadow scale={[0.9, 1.08, 0.96]}><sphereGeometry args={[0.43, 64, 48]} /><Skin c={skin} /></mesh>
         <mesh position={[0, -0.22, 0.1]} scale={[0.85, 0.5, 0.75]}><sphereGeometry args={[0.28, 40, 24]} /><Skin c={skin} /></mesh>
-        {[-1, 1].map(s => <mesh key={s} position={[s * 0.21, -0.12, 0.28]} scale={[1, 0.75, 0.55]}><sphereGeometry args={[0.11, 32, 20]} /><Skin c={skin} /></mesh>)}
+        {[-1, 1].map(s => <mesh key={s} position={[s * 0.2, -0.1, 0.27]} scale={[0.8, 0.65, 0.45]}><sphereGeometry args={[0.11, 32, 20]} /><Skin c={skin} /></mesh>)}
         <Eye side={-1} skin={skin} lidRef={el => (lids.current[0] = el)} /><Eye side={1} skin={skin} lidRef={el => (lids.current[1] = el)} />
         {[-1, 1].map(s => (
           <group key={s}>
-            <mesh position={[s * 0.17, 0.19, 0.362]} rotation={[-0.4, s * 0.25, s * -0.12]}><capsuleGeometry args={[0.02, 0.085, 6, 12]} /><meshStandardMaterial color={brow} roughness={0.8} /></mesh>
+            <mesh position={[s * 0.15, 0.115, 0.392]} rotation={[-0.4, s * 0.25, s * -0.08]}><capsuleGeometry args={[0.02, 0.085, 6, 12]} /><meshStandardMaterial color={brow} roughness={0.8} /></mesh>
             <mesh position={[s * 0.27, -0.12, 0.345]} rotation={[0, s * 0.6, 0]}><circleGeometry args={[0.065, 24]} />{blush}</mesh>
             <group position={[s * 0.43, -0.02, 0]} rotation={[0, s * 0.3, 0]}>
               <mesh scale={[0.6, 1, 1]}><sphereGeometry args={[0.085, 20, 16]} /><Skin c={skin} /></mesh>
@@ -183,8 +191,8 @@ export default function Humanoid({ rig, skin = '#ffd6b0', shirt = '#2a58c8', pan
             </group>
           </group>
         ))}
-        <mesh position={[0, -0.06, 0.42]} scale={[1.15, 0.85, 1]}><sphereGeometry args={[0.042, 20, 14]} /><Skin c={skin} /></mesh>
-        <group position={[0, -0.17, 0.388]} rotation={[-0.35, 0, 0]} scale={1.25}>
+        <mesh position={[0, -0.075, 0.415]} scale={[0.85, 1.25, 1.2]}><sphereGeometry args={[0.055, 20, 14]} /><Skin c={skin} /></mesh>
+        <group position={[0, -0.2, 0.375]} rotation={[-0.35, 0, 0]} scale={0.8}>
           <mesh rotation={[0, 0, Math.PI]} scale={[1, 0.85, 1]}><circleGeometry args={[0.075, 32, 0, Math.PI]} /><meshStandardMaterial color="#7a1e1a" roughness={0.6} side={THREE.DoubleSide} /></mesh>
           <mesh position={[0, -0.04, 0.002]} scale={[1, 0.45, 1]}><circleGeometry args={[0.04, 24]} /><meshStandardMaterial color="#ff7d7d" roughness={0.5} side={THREE.DoubleSide} /></mesh>
           <mesh position={[0, -0.006, 0.003]} scale={[1, 0.2, 1]}><circleGeometry args={[0.06, 24, 0, Math.PI]} /><meshStandardMaterial color="#ffffff" roughness={0.3} side={THREE.DoubleSide} /></mesh>

@@ -49,7 +49,7 @@ export default function QuizManager({ state, dispatch }) {
     <>
       <div className="pill" aria-label="Question number">{pill}</div>
       <div className="center">
-        <div className="banner enter" key={key + (round === 3 ? state.matched.length : '')}><span>{text}</span></div>
+        {round !== 3 && <div className="banner enter" key={key}><span>{text}</span></div>}   {/* the matching round needs no instruction banner */}
         <Scoreboard state={state} />
       </div>
       {state.result ? null : (

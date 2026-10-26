@@ -34,20 +34,24 @@ function Ground() {
     const c = document.createElement('canvas'); c.width = c.height = 512;
     const g = c.getContext('2d');
     for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#86da55' : '#72cc44'; g.fillRect(i * 32, 0, 32, 512); }
+    for (let k = 0; k < 9000; k++) {                 // natural grass: tiny light and dark blades over the mower stripes
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,200,.07)' : 'rgba(20,70,10,.08)';
+      g.fillRect(Math.random() * 512, Math.random() * 512, 1, 2 + Math.random() * 2);
+    }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
   }, []);
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]} receiveShadow><circleGeometry args={[160, 48]} /><meshStandardMaterial color="#5cb23c" roughness={1} /></mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[28, 22, 1]} receiveShadow><circleGeometry args={[1, 96]} /><meshStandardMaterial map={tex} roughness={1} /></mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} scale={[26.5, 20.5, 1]}><torusGeometry args={[1, 0.01, 6, 160]} /><meshBasicMaterial color="#ffffff" /></mesh>
-      <RingBoxes n={48} A={27.6} B={21.5} h={1} depth={0.5} colors={ADS} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} scale={[75, 60.5, 1]} receiveShadow><circleGeometry args={[1, 96]} /><meshStandardMaterial map={tex} roughness={1} /></mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} scale={[73.5, 59, 1]}><torusGeometry args={[1, 0.01, 6, 160]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <RingBoxes n={116} A={74.6} B={60} h={1} depth={0.5} colors={ADS} />
     </group>
   );
 }
 
 function Floodlights() {
-  const towers = [[-31, -24], [31, -24], [-31, 24], [31, 24]];
+  const towers = [[-85, -71], [85, -71], [-85, 71], [85, 71]];
   return (
     <group>
       {towers.map(([x, z], i) => (
@@ -88,7 +92,7 @@ function Pavilion() {
 
 const LEAVES = ['#4fb83f', '#63c94c', '#3ea635'];
 function Scenery() {
-  const trees = useMemo(() => Array.from({ length: 34 }, (_, i) => { const th = (i / 34) * Math.PI * 2; return { x: Math.cos(th) * 50, z: Math.sin(th) * 43, s: 1.5 + ((i * 37) % 10) / 9 }; }), []);
+  const trees = useMemo(() => Array.from({ length: 64 }, (_, i) => { const th = (i / 34) * Math.PI * 2; return { x: Math.cos(th) * 106, z: Math.sin(th) * 91, s: 1.5 + ((i * 37) % 10) / 9 }; }), []);
   const clouds = useRef();
   useFrame((_, dt) => { if (clouds.current) clouds.current.position.x = ((clouds.current.position.x + dt * 0.8 + 120) % 240) - 120; });
   return (

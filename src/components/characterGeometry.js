@@ -58,15 +58,15 @@ export function limbGeometry({ L1, L2, radius, cover, cloth, skin, folds, segmen
 
 /* arm: rounded deltoid, biceps, soft elbow, forearm; sleeve creases at the elbow */
 export const ARM_RADIUS = (L1, L2) => d => (d < L1
-  ? lerp(0.145, 0.108, d / L1) + 0.016 * Math.sin((Math.PI * d) / L1)
-  : lerp(0.108, 0.08, (d - L1) / L2) + 0.017 * Math.sin((Math.PI * (d - L1)) / L2));
+  ? lerp(0.112, 0.082, d / L1) + 0.012 * Math.sin((Math.PI * d) / L1)
+  : lerp(0.082, 0.058, (d - L1) / L2) + 0.013 * Math.sin((Math.PI * (d - L1)) / L2));
 export const sleeveFolds = L1 => (d, phi) => 0.007 * bump(d, L1, 0.07) * Math.sin(phi * 5 + d * 40) + 0.004 * bump(d, L1 * 0.45, 0.06) * Math.sin(phi * 3 - d * 30);
 
 /* leg: hip, thigh, knee, calf, ankle; trousers with creases behind the knee and a gentle pooling at the hem */
-export const LEG = { upper: 0.44, lower: 0.36 };
+export const LEG = { upper: 0.62, lower: 0.56 };
 export const LEG_RADIUS = d => (d < LEG.upper
-  ? lerp(0.172, 0.142, d / LEG.upper)
-  : lerp(0.145, 0.1, (d - LEG.upper) / LEG.lower) + 0.02 * Math.sin((Math.PI * (d - LEG.upper)) / LEG.lower));
+  ? lerp(0.15, 0.108, d / LEG.upper)
+  : lerp(0.106, 0.068, (d - LEG.upper) / LEG.lower) + 0.02 * Math.sin((Math.PI * (d - LEG.upper)) / LEG.lower));
 export const trouserFolds = (d, phi) => 0.008 * bump(d, LEG.upper, 0.08) * Math.sin(phi * 6 + d * 35) * (Math.cos(phi) < 0 ? 1 : 0.4)
   + 0.012 * bump(d, LEG.upper + LEG.lower - 0.04, 0.05) * (0.5 + 0.5 * Math.sin(phi * 4))
   - 0.004 * bump(Math.abs(Math.sin(phi)), 1, 0.06);                       // side seam
