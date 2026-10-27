@@ -1,4 +1,4 @@
 {
-  "batsman": null,
-  "bowler": null
+  "batsman": "batsman.glb",
+  "bowler": "bowler.glb"
 }

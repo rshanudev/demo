@@ -9,8 +9,8 @@ import CricketPitch from './CricketPitch.jsx';
 import Batsman from './Batsman.jsx';
 import Bowler from './Bowler.jsx';
 import CricketBall from './CricketBall.jsx';
-import { PZ, T, BAT_X, STUMP_BAT, CONTACT, clamp01, ringB } from '../game/constants.js';
-import { pickShot, sixBall } from '../game/shots.js';
+import { PZ, T, BAT_X, STUMP_BAT, clamp01, ringB } from '../game/constants.js';
+import { pickShot, sixBall, DEFAULT_CONTACT } from '../game/shots.js';
 import { play } from '../game/sound.js';
 
 /* Slow motion around the moment of contact / the stumps being hit. */
@@ -55,7 +55,7 @@ function cinePose(a, V) {
   if (six) {
     if (t < T.contact + 0.9) { pos.set(BAT_X + 2.4, 2.3, PZ + 8.5); look.set(BAT_X + 0.8, 1.3, PZ); }
     else {
-      const b = sixBall(t, sh), dx = sh.F[0] - CONTACT.x, dz = sh.F[1] - (PZ + CONTACT.dz), n = Math.hypot(dx, dz) || 1, ux = dx / n, uz = dz / n;
+      const c = a.contact || DEFAULT_CONTACT, b = sixBall(t, sh, c), dx = sh.F[0] - c.x, dz = sh.F[1] - c.z, n = Math.hypot(dx, dz) || 1, ux = dx / n, uz = dz / n;
       pos.set(b.x - ux * 11 - uz * 4, Math.max(2.5, b.y * 0.6 + 2.5), b.z - uz * 11 + ux * 4); look.set(b.x, b.y, b.z);
     }
   } else if (t < 2.1) { pos.set(-2.2, 1.6, PZ + 7); look.set(-6.2, 0.9, PZ); }
@@ -160,7 +160,7 @@ function Look({ high }) {
         <Lightformer form="rect" intensity={2.2} color="#fff4e2" position={[-6, 10, 8]} scale={[12, 8, 1]} target={[0, 0, 0]} />
         <Lightformer form="rect" intensity={1.2} color="#bfe2ff" position={[10, 5, -6]} scale={[10, 6, 1]} target={[0, 0, 0]} />
         <Lightformer form="ring" intensity={1.6} color="#ffffff" position={[0, 12, -12]} scale={6} target={[0, 0, 0]} />
-        <Lightformer form="rect" intensity={0.8} color="#7fd65a" position={[0, -6, 0]} rotation-x={Math.PI / 2} scale={[30, 30, 1]} />
+        <Lightformer form="rect" intensity={0.3} color="#b8d68a" position={[0, -6, 0]} rotation-x={Math.PI / 2} scale={[30, 30, 1]} />
       </Environment>
       {high && (
         <EffectComposer multisampling={4} disableNormalPass>
@@ -192,7 +192,7 @@ export default function Scene({ state, dispatch, quality, cine, cmd, band }) {
       <CartoonSky />
       <Look high={high} />
       <ambientLight intensity={0.1} />
-      <hemisphereLight args={['#cfeaff', '#4a8a2a', 0.35]} />
+      <hemisphereLight args={['#cfeaff', '#a89c78', 0.35]} />
       <directionalLight
         position={[-10, 22, 16]} intensity={2.6} color="#fff1dc" castShadow={high} shadow-mapSize={[2048, 2048]} shadow-bias={-0.0004} shadow-normalBias={0.02} shadow-radius={6}
         shadow-camera-left={-18} shadow-camera-right={18} shadow-camera-top={12} shadow-camera-bottom={-8} shadow-camera-near={1} shadow-camera-far={70}

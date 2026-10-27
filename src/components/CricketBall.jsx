@@ -1,8 +1,8 @@
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { PZ, RELEASE, CONTACT, STUMP_BAT, T, clamp01, lerp } from '../game/constants.js';
-import { sixBall } from '../game/shots.js';
+import { PZ, RELEASE, STUMP_BAT, T, clamp01, lerp } from '../game/constants.js';
+import { sixBall, DEFAULT_CONTACT } from '../game/shots.js';
 
 /* polished red leather with faint scuffs; a raised seam with two rows of stitches */
 const leather = (() => {
@@ -24,13 +24,14 @@ export default function CricketBall({ animRef }) {
     const t = a.t, six = a.kind === 'six', sh = a.shot;
     const r0 = a.relPos || { x: RELEASE.x, y: RELEASE.y, z: PZ };   // released from the bowler's hand
     let x, y, z;
+    const c = a.contact || DEFAULT_CONTACT;                 // the middle of the bat for this shot (set by the batsman)
     if (six && t <= T.contact) {                            // delivery: release -> bounce -> bat
       const u = (t - T.release) / (T.contact - T.release);
-      x = lerp(r0.x, CONTACT.x, u);
-      y = u < 0.55 ? r0.y - (r0.y - 0.15) * Math.pow(u / 0.55, 1.6) : 0.15 + (CONTACT.y - 0.15) * (1 - Math.pow(1 - (u - 0.55) / 0.45, 2));
-      z = lerp(r0.z, PZ + CONTACT.dz, u);
+      x = lerp(r0.x, c.x, u);
+      y = u < 0.55 ? r0.y - (r0.y - 0.15) * Math.pow(u / 0.55, 1.6) : 0.15 + (c.y - 0.15) * (1 - Math.pow(1 - (u - 0.55) / 0.45, 2));
+      z = lerp(r0.z, c.z, u);
     } else if (six) {                                       // SIX: a different shot every time
-      const b = sixBall(t, sh); x = b.x; y = b.y; z = b.z; m.visible = b.v < 1;
+      const b = sixBall(t, sh, c); x = b.x; y = b.y; z = b.z; m.visible = b.v < 1;
     } else if (t <= T.stump) {                              // wrong answer: pitches once, kicks up past the bat and flies into the stumps
       const p = (t - T.release) / (T.stump - T.release), tB = T.release + sh.pitch * (T.stump - T.release);
       x = lerp(r0.x, STUMP_BAT + 0.1, p);

@@ -135,3 +135,28 @@ export function hairGeometry() {
   parts.forEach(g => g.attributes.uv && g.deleteAttribute('uv'));
   return mergeGeometries(parts);
 }
+
+/* realistic head: an egg-shaped skull with a tapering jaw and chin, cheekbones, a brow ridge and eye sockets
+   (radius ~0.43, face looking along +z) */
+export function headGeometry() {
+  const g = new THREE.SphereGeometry(0.43, 96, 72), p = g.attributes.position, n = new THREE.Vector3();
+  const F = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+  const feats = [
+    [F(-0.34, 0.04, 0.94), -0.03, 0.2], [F(0.34, 0.04, 0.94), -0.03, 0.2],      // eye sockets
+    [F(-0.3, 0.24, 0.92), 0.018, 0.2], [F(0.3, 0.24, 0.92), 0.018, 0.2],          // brow ridge
+    [F(-0.55, -0.18, 0.8), 0.02, 0.24], [F(0.55, -0.18, 0.8), 0.02, 0.24],        // cheekbones
+    [F(0, -0.82, 0.57), 0.015, 0.2],                                               // chin
+    [F(-0.95, 0.05, -0.1), -0.03, 0.45], [F(0.95, 0.05, -0.1), -0.03, 0.45]       // flatter temples
+  ];
+  for (let i = 0; i < p.count; i++) {
+    n.fromBufferAttribute(p, i).normalize();
+    let r = 0.43;
+    for (const [f, amp, w] of feats) { const a = Math.acos(Math.min(1, n.dot(f))); r += amp * Math.exp(-(a * a) / (w * w)); }
+    let x = n.x * r, y = n.y * r, z = n.z * r;
+    const jaw = 1 - 0.17 * ss(-n.y, 0.1, 0.95);                                  // jaw narrows softly towards the chin
+    x *= 0.88 * jaw; y *= 1.1; z *= 0.98 + 0.06 * ss(-n.z, -0.3, 0.3);           // smooth: a little fuller at the back
+    p.setXYZ(i, x, y, z);
+  }
+  g.computeVertexNormals();
+  return g;
+}

@@ -67,14 +67,26 @@ function BreakableStumps({ animRef }) {
   );
 }
 
-const line = (key, pos, size) => <mesh key={key} position={pos}><boxGeometry args={size} /><meshBasicMaterial color="#ffffff" /></mesh>;
+/* painted crease lines, laid just on top of the clay (the pitch surface is at y = 0.022) */
+const LINE_Y = 0.025, LW = 0.06;
+const paint = <meshStandardMaterial color="#ffffff" roughness={0.75} emissive="#ffffff" emissiveIntensity={0.25} />;
+const line = (key, pos, size) => <mesh key={key} position={[pos[0], LINE_Y, pos[1]]} receiveShadow><boxGeometry args={[size[0], 0.004, size[1]]} />{paint}</mesh>;
 
+/* Markings at each end, as on a real pitch:
+   bowling crease through the stumps, as wide as the return creases;
+   popping crease in front of it, running right across the pitch and out onto the grass;
+   return creases at right angles from the popping crease, back past the stumps;
+   short wide-guide marks on the popping crease. */
+const POP = 6.0, BOWL = 7.2, RET_Z = 1.3, RET_BACK = 8.2, POP_HALF = 2.2, WIDE_Z = 0.86;
 export default function CricketPitch({ animRef }) {
   const L = [];
   [-1, 1].forEach(s => {
-    L.push(line('pop' + s, [s * 6.0, 0.016, PZ], [0.07, 0.004, 3.4]));          // popping crease
-    L.push(line('bow' + s, [s * 7.2, 0.016, PZ], [0.07, 0.004, 2.6]));          // bowling crease
-    [-1, 1].forEach(z => L.push(line(`ret${s}${z}`, [s * 6.6, 0.016, PZ + z * 1.3], [1.9, 0.004, 0.06])));   // return creases
+    L.push(line('pop' + s, [s * POP, PZ], [LW, POP_HALF * 2]));                                    // popping crease
+    L.push(line('bow' + s, [s * BOWL, PZ], [LW, RET_Z * 2 + LW]));                               // bowling crease
+    [-1, 1].forEach(z => {
+      L.push(line(`ret${s}${z}`, [s * (POP + RET_BACK) / 2, PZ + z * RET_Z], [RET_BACK - POP, LW]));   // return crease
+      L.push(line(`wide${s}${z}`, [s * (POP - 0.25), PZ + z * WIDE_Z], [0.5, LW]));                     // wide guide
+    });
   });
   return (
     <group>

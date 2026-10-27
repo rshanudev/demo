@@ -5,11 +5,15 @@ import * as THREE from 'three';
 import Humanoid from './Humanoid.jsx';
 import { CharacterBody } from './ModelCharacter.jsx';
 import { BAT_X, PZ, clamp01, lerp, ease } from '../game/constants.js';
-import { swingPose, idlePose, batAxes, reach, CELEB, DROOP, TOP_HAND, STANCE_YAW, BAT_SCALE } from '../game/batting.js';
+import { swingPose, idlePose, blendPose, batAxes, hitPose, sweetSpot, reach, celebPose, droopPose, setBodyStyle, TOP_HAND, STANCE_YAW, BAT_SCALE } from '../game/batting.js';
 
 export const SHIRTS = ['#e0362c', '#2a58c8', '#1a9a6a', '#f08a1e', '#7b3cee', '#d9a81c', '#0aa6c8', '#c43aa0', '#5a8a1a', '#ee5a3a'];
 const M = (c, r = 0.55, m = 0) => <meshStandardMaterial color={c} roughness={r} metalness={m} />;
+const UP = new THREE.Vector3(0, 1, 0);
 const POLE_TOP = new THREE.Vector3(0.7, -1, -0.5), POLE_BOTTOM = new THREE.Vector3(-0.7, -1, -0.5);   // elbows point down and out
+
+/* how far the hips drop for a crouch: the back leg (spread only) stays planted, the front leg can stride out */
+const hipDrop = (model, crouch) => (model ? 0.77 * (1 - Math.cos(crouch * 2) * Math.cos(crouch * 1.1)) : crouch * 0.15);
 
 /* varnished willow: pale wood with fine, slightly wavy grain running down the blade */
 const willow = (() => {
@@ -44,18 +48,19 @@ function Bat({ batRef, sticker }) {
 }
 
 export default function Batsman({ index, animRef, enter, mood }) {
-  const rig = useRef({}), root = useRef(), bat = useRef(), born = useRef(null), look = useRef({ x: 0, y: 0.5 });
+  const rig = useRef({}), root = useRef(), bat = useRef(), born = useRef(null), look = useRef({ x: 0, y: 0.5 }), lastIdle = useRef(null);
   const colour = SHIRTS[index % SHIRTS.length];
   const tmp = useMemo(() => ({ grip: new THREE.Vector3(), top: new THREE.Vector3(), free: new THREE.Vector3(), dir: new THREE.Vector3(), face: new THREE.Vector3(), side: new THREE.Vector3(), m: new THREE.Matrix4() }), []);
 
   useFrame(({ clock }, dt) => {
     const R = rig.current, g = root.current, b = bat.current;
     const model = R.model;                          // imported GLB character, when one is configured
+    setBodyStyle(model ? R.style : 'real');         // the swing follows the body's proportions
     if (!g || !b || (!model && (!R.armR || !R.elbowR))) return;
     const now = clock.elapsedTime;
     if (born.current === null) born.current = now;
     const age = now - born.current, a = animRef.current, t = a ? a.t : 0, six = a && a.kind === 'six';
-    let crouch = 0.2, x = BAT_X, y = Math.sin(now * 3) * 0.015, yaw = STANCE_YAW, lean = 0, head = 0, legs = 0, pose = idlePose(now);
+    let crouch = 0.2, stride = 0, x = BAT_X, y = Math.sin(now * 3) * 0.015, yaw = STANCE_YAW, lean = 0, head = 0, legs = 0, pose = idlePose(now);
 
     if (enter && age < 0.9) {                       // new batsman jogs in
       crouch = 0.2 * clamp01((age - 0.6) / 0.3);
@@ -63,10 +68,17 @@ export default function Batsman({ index, animRef, enter, mood }) {
       x = lerp(BAT_X - 4.5, BAT_X, e); yaw = lerp(1.5, STANCE_YAW, e); legs = Math.sin(now * 14) * 0.6 * (1 - e);
     }
     if (a) {
-      const sh = a.shot || { s0: 1.67, yawEnd: 0.95, armX: -0.15, lean: 0 };
+      const sh = a.shot || { move: 'drive', s0: 1.67, yawEnd: 0.6, lean: 0 };
+      if (!a.contact) {                              // where the middle of the bat will be at the hit, so the ball arrives right on it
+        const v = sweetSpot(hitPose(sh), tmp.free).multiplyScalar(BAT_SCALE).applyAxisAngle(UP, STANCE_YAW);
+        a.contact = { x: BAT_X + v.x, y: v.y - hipDrop(model, sh.crouch ?? 0.2), z: PZ + v.z };
+      }
       pose = swingPose(t, sh, six);                  // stance -> backlift -> downswing -> follow-through
+      if (lastIdle.current && t < 0.6) pose = { ...blendPose(lastIdle.current, pose, ease(t / 0.6)), f: pose.f };   // bat may be down mid-tap: lift it smoothly
       const turn = 1 - (1 - pose.f) * (1 - pose.f);
-      crouch = 0.2 * (1 - turn * 0.75);                // batting crouch, rising through the shot
+      const into = ease(clamp01((t - sh.s0 + 0.25) / 0.45));   // gets into the shot: down low for a sweep, front foot down the pitch for a drive
+      crouch = lerp(0.2, sh.crouch ?? 0.2, into) * (1 - turn * 0.5);
+      stride = (sh.stride || 0) * into * (1 - turn * 0.3);
       yaw = lerp(STANCE_YAW, sh.yawEnd, turn); lean = sh.lean * turn;
       if (six) {
         const c = clamp01((t - 2.55) / 0.3);
@@ -75,10 +87,11 @@ export default function Batsman({ index, animRef, enter, mood }) {
         const d = clamp01((t - 2.35) / 0.45);
         if (d > 0) { head = 0.5 * d; lean += -0.2 * d; }
         const wk = clamp01((t - 3.6) / 1.2);        // walk off
-        if (wk > 0) { crouch = 0; x = lerp(BAT_X, BAT_X - 7.5, wk); yaw = lerp(yaw, -1.5, clamp01((t - 3.5) / 0.2)); legs = Math.sin(now * 12) * 0.5; head = 0.3; }
+        if (wk > 0) { crouch = 0; stride = 0; x = lerp(BAT_X, BAT_X - 7.5, wk); yaw = lerp(yaw, -1.5, clamp01((t - 3.5) / 0.2)); legs = Math.sin(now * 12) * 0.5; head = 0.3; }
       }
-    } else if (mood === 'win') { crouch = 0; pose = CELEB; y += Math.abs(Math.sin(now * 7)) * 0.3; yaw = 0.2; }
-    else if (mood === 'lose') { crouch = 0; pose = DROOP; head = 0.5; }
+    } else if (mood === 'win') { crouch = 0; pose = celebPose(); y += Math.abs(Math.sin(now * 7)) * 0.3; yaw = 0.2; }
+    else if (mood === 'lose') { crouch = 0; pose = droopPose(); head = 0.5; }
+    else lastIdle.current = pose;                    // where the bat was when the next ball comes
 
     // head: watches the bowler and the ball, follows a six into the sky, eases between targets
     let lookY = 0.62 + Math.sin(now * 0.7) * 0.06, lookX = head + Math.sin(now * 1.1) * 0.03;
@@ -88,8 +101,9 @@ export default function Batsman({ index, animRef, enter, mood }) {
     L.x += (lookX - L.x) * k; L.y += (lookY - L.y) * k;
     const sway = a || mood ? 0 : Math.sin(now * 0.9) * 0.03;   // idle weight shift from foot to foot
     R.crouch = crouch;                                 // knees bent, hips back, feet stay planted
-    g.position.set(x, y - crouch * 0.15, PZ); g.rotation.set(lean, yaw, sway);
-    if (model) { model.play('idle'); model.head(L.x, L.y); model.leg(-1, legs); model.leg(1, -legs); }
+    const cm = crouch * 2, spread = crouch * 1.1;          // the cartoon model bends deeper (short legs: thigh 0.4 + shin 0.37), feet apart
+    g.position.set(x, y - hipDrop(model, crouch), PZ); g.rotation.set(lean, yaw, sway);   // drop the hips so the feet stay planted
+    if (model) { model.play('idle'); model.head(L.x, L.y); model.leg(-1, legs); model.leg(1, -legs); model.crouch(cm, spread, stride); }
     else {
       R.head.rotation.set(L.x, L.y, 0); R.legL.rotation.x = legs - crouch; R.legR.rotation.x = -legs - crouch;
       R.legL.rotation.z = -crouch * 0.5; R.legR.rotation.z = crouch * 0.5;      // feet a little wider than the shoulders

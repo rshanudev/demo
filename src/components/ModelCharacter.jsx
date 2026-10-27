@@ -9,13 +9,17 @@ import { findBones, solveTwoBone, applyWorldRotation, findClip } from '../game/m
    public/models/characters.json names the GLB for each role, e.g. { "batsman": "batsman.glb", "bowler": "bowler.glb" }.
    When a role has no file (or it fails to load) the built-in stylised player is used instead. */
 let manifest = null;
+const modelUrl = (m, role) => (m && typeof m[role] === 'string' && m[role] ? `${import.meta.env.BASE_URL}models/${m[role]}` : null);
 const loadManifest = () => (manifest ||= fetch(`${import.meta.env.BASE_URL}models/characters.json`, { cache: 'no-cache' })
-  .then(r => (r.ok ? r.json() : {})).catch(() => ({})));
+  .then(r => (r.ok ? r.json() : {})).catch(() => ({}))
+  .then(m => { ['batsman', 'bowler'].forEach(role => { const u = modelUrl(m, role); if (u) useGLTF.preload(u); }); return m; }));   // start downloading the models straight away
+loadManifest();
+/* undefined while the list is loading, null when the role has no model, otherwise the model's URL */
 function useModelUrl(role) {
-  const [url, setUrl] = useState(null);
+  const [url, setUrl] = useState(undefined);
   useEffect(() => {
     let on = true;
-    loadManifest().then(m => { if (on && m && typeof m[role] === 'string' && m[role]) setUrl(`${import.meta.env.BASE_URL}models/${m[role]}`); });
+    loadManifest().then(m => { if (on) setUrl(modelUrl(m, role)); });
     return () => { on = false; };
   }, [role]);
   return url;
@@ -31,8 +35,9 @@ class Fallback extends Component {
 /* role = 'batsman' | 'bowler'; `fallback` is the built-in player */
 export function CharacterBody({ role, rig, fallback, height }) {
   const url = useModelUrl(role);
+  if (url === undefined) return null;                   // still finding out: show nothing rather than flashing the old player
   if (!url) return fallback;
-  return <Fallback fallback={fallback}><Suspense fallback={fallback}><ModelCharacter url={url} rig={rig} height={height} /></Suspense></Fallback>;
+  return <Fallback fallback={fallback}><Suspense fallback={null}><ModelCharacter url={url} rig={rig} height={height} /></Suspense></Fallback>;
 }
 
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
@@ -43,16 +48,17 @@ const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), DOWN = new
 function ModelCharacter({ url, rig, height = 2.46 }) {
   const gltf = useGLTF(url);
   const holder = useRef(), st = useRef({ action: null, key: null });
-  const { scene, bones, rest } = useMemo(() => {
+  const { scene, bones, rest, style } = useMemo(() => {
     const scene = cloneSkinned(gltf.scene);
     scene.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     scene.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(scene), size = box.getSize(new THREE.Vector3()), s = height / (size.y || 1);
+    let info = {}; scene.traverse(o => { if (o.userData && o.userData.bodyStyle) info = o.userData; });   // set in Blender (custom properties)
+    const box = new THREE.Box3().setFromObject(scene), size = box.getSize(new THREE.Vector3()), s = (info.gameHeight || height) / (size.y || 1);
     scene.scale.multiplyScalar(s);
     scene.position.set(-((box.min.x + box.max.x) / 2) * s, -box.min.y * s, -((box.min.z + box.max.z) / 2) * s);
     const rest = new Map();
     scene.traverse(o => { if (o.isBone) rest.set(o, o.quaternion.clone()); });
-    return { scene, bones: findBones(scene), rest };
+    return { scene, bones: findBones(scene), rest, style: info.bodyStyle || 'real' };
   }, [gltf, height]);
   const mixer = useMemo(() => new THREE.AnimationMixer(scene), [scene]);
 
@@ -81,6 +87,17 @@ function ModelCharacter({ url, rig, height = 2.46 }) {
         applyWorldRotation(up, tmp.q.setFromAxisAngle(tmp.ax, angle));
         if (lo) applyWorldRotation(lo, tmp.q.setFromAxisAngle(tmp.ax, Math.max(0, angle) * 1.6));
       },
+      crouch(c, w = 0, stride = 0) {                    // batting crouch: thighs forward, knees bent back, feet stay under the body; w spreads the feet apart, stride takes the front (left) foot further down the pitch
+        const m = space().matrixWorld;
+        for (const sd of ['L', 'R']) {
+          const up = bones['upLeg' + sd], lo = bones['leg' + sd]; if (!up) continue;
+          tmp.ax.copy(X).transformDirection(m);
+          applyWorldRotation(up, tmp.q.setFromAxisAngle(tmp.ax, -c));
+          if (lo) applyWorldRotation(lo, tmp.q.setFromAxisAngle(tmp.ax, 2 * c));
+          const sp = sd === 'L' ? w + stride : -w;
+          if (sp) applyWorldRotation(up, tmp.q.setFromAxisAngle(tmp.ax.set(0, 0, 1).transformDirection(m), sp));
+        }
+      },
       head(x, y) {
         if (!bones.head) return;
         const m = space().matrixWorld;
@@ -99,13 +116,15 @@ function ModelCharacter({ url, rig, height = 2.46 }) {
       }
     };
     rig.current.model = api;
+    rig.current.ball = scene.getObjectByName('Ball') || null;   // a ball the model holds (the bowler), released by the game
+    rig.current.style = style;                                 // 'toon' (big-headed cartoon) or 'real' body proportions
     return () => { if (rig.current.model === api) delete rig.current.model; mixer.stopAllAction(); };
-  }, [scene, bones, mixer, gltf, rig]);
+  }, [scene, bones, mixer, gltf, rig, style]);
 
   useFrame((_, dt) => {                                  // runs before the parent's pose code: clip (or rest pose) first, IK on top
     if (st.current.action) mixer.update(Math.min(dt, 0.05));
     else rest.forEach((q, b) => b.quaternion.copy(q));
-  });
+  }, -1);                                               // negative priority: always before the players' pose code, even though the model loads later
 
   return <group ref={holder}><primitive object={scene} /></group>;
 }
